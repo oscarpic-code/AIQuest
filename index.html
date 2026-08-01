@@ -357,6 +357,11 @@
         currentLink = correctArticle.link;
       }
 
+      function formatLink(link) {
+        if (!link) return '';
+        return link.length > 30 ? `${link.slice(0, 30)}...` : link;
+      }
+
       function handleAnswer(selected, correctArticle) {
         const buttons = Array.from(optionsContainer.querySelectorAll('.option'));
         buttons.forEach(button => {
@@ -365,10 +370,12 @@
           button.disabled = true;
         });
 
+        const shortLink = formatLink(correctArticle.link);
+
         if (selected === correctArticle.title) {
-          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular real.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
+          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular real.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>`;
         } else {
-          feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
+          feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>`;
         }
 
         feedbackBox.hidden = false;
