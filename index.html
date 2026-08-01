@@ -209,6 +209,7 @@
       </section>
     </main>
 
+    <script src="antonyms.js"></script>
     <script>
       const splashScreen = document.getElementById('splash');
       const gameScreen = document.getElementById('game');
@@ -224,30 +225,7 @@
 
       const newsFeedUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
       const newsProxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(newsFeedUrl)}`;
-      const antonymMap = {
-        ayuda: ['dificulta', 'complica'],
-        mejora: ['empeora', 'degrada'],
-        nueva: ['vieja', 'antigua'],
-        nuevo: ['viejo', 'antiguo'],
-        grande: ['pequeño', 'reducido'],
-        gran: ['pequeño', 'reducido'],
-        rápida: ['lenta', 'tardía'],
-        rápido: ['lento', 'tardío'],
-        importante: ['irrelevante', 'secundario'],
-        potencia: ['debilidad', 'limitación'],
-        potente: ['débil', 'limitado'],
-        aumenta: ['disminuye', 'decrece'],
-        crece: ['decrece', 'disminuye'],
-        avanza: ['retrocede', 'se detiene'],
-        interpreta: ['desinterpreta', 'malinterpreta'],
-        sorprendente: ['decepcionante', 'mediocre'],
-        moderna: ['antigua', 'vieja'],
-        moderno: ['antiguo', 'viejo'],
-        real: ['falsa', 'inventada'],
-        fácil: ['difícil', 'complicado'],
-        clara: ['confusa', 'oscura'],
-        claro: ['confuso', 'oscuro']
-      };
+      const antonymMap = window.antonymMap || {};
 
       function showScreen(screenId) {
         splashScreen.classList.remove('active');
