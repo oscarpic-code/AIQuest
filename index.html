@@ -398,6 +398,10 @@
         return `<a class="summary-link" href="${buildJinaUrl(url)}" target="_blank" rel="noreferrer">Ver resumen</a>`;
       }
 
+      function createBlockedSummaryMessage() {
+        return '<p class="hint">La vista de resumen de Jina no está disponible en este momento para esta noticia.</p>';
+      }
+
       async function handleAnswer(selected, correctArticle) {
         const buttons = Array.from(optionsContainer.querySelectorAll('.option'));
         buttons.forEach(button => {
@@ -416,6 +420,26 @@
         }
 
         feedbackBox.hidden = false;
+
+        try {
+          const response = await fetch(buildJinaUrl(correctArticle.link), {
+            headers: {
+              Accept: 'text/plain'
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`Jina respondió con ${response.status}`);
+          }
+
+          const text = await response.text();
+          if (text && text.trim()) {
+            feedbackBox.insertAdjacentHTML('beforeend', '<p class="hint">La vista de resumen está disponible.</p>');
+          }
+        } catch (error) {
+          console.warn('No se pudo abrir la vista de resumen:', error);
+          feedbackBox.insertAdjacentHTML('beforeend', createBlockedSummaryMessage());
+        }
       }
 
       async function loadRound() {
