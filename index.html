@@ -307,29 +307,44 @@
         return replaced ? result : null;
       }
 
-      function buildVariantTitles(correctTitle) {
+      function buildVariantTitles(correctTitle, fallbackTitle = '') {
         const title = normalizeText(correctTitle);
+        const variants = [title];
         const replaceableWords = getReplaceableWords(title);
 
-        if (replaceableWords.length < 2) {
-          return null;
+        if (replaceableWords.length) {
+          const firstWord = replaceableWords[0];
+          const firstVariant = replaceWordWithAntonym(title, firstWord);
+          if (firstVariant) {
+            variants.push(firstVariant);
+          }
+
+          const secondWord = replaceableWords.find(word => word.toLowerCase() !== firstWord.toLowerCase());
+          if (secondWord) {
+            const secondVariant = replaceWordWithAntonym(title, secondWord, [firstWord.toLowerCase()]);
+            if (secondVariant) {
+              variants.push(secondVariant);
+            }
+          }
         }
 
-        const firstWord = replaceableWords[0];
-        const secondWord = replaceableWords.find(word => word.toLowerCase() !== firstWord.toLowerCase());
+        if (variants.length < 3 && fallbackTitle) {
+          const fallbackNormalized = normalizeText(fallbackTitle);
+          const fallbackWords = getReplaceableWords(fallbackNormalized);
 
-        if (!secondWord) {
-          return null;
+          if (fallbackWords.length) {
+            const fallbackVariant = replaceWordWithAntonym(fallbackNormalized, fallbackWords[0]);
+            if (fallbackVariant && fallbackVariant !== title) {
+              variants.push(fallbackVariant);
+            }
+          }
+
+          if (variants.length < 3 && fallbackNormalized !== title) {
+            variants.push(fallbackNormalized);
+          }
         }
 
-        const firstVariant = replaceWordWithAntonym(title, firstWord);
-        const secondVariant = replaceWordWithAntonym(title, secondWord, [firstWord.toLowerCase()]);
-
-        if (!firstVariant || !secondVariant) {
-          return null;
-        }
-
-        return [title, firstVariant, secondVariant].filter((value, index, array) => value && array.indexOf(value) === index);
+        return [...new Set(variants.filter(Boolean))].slice(0, 3);
       }
 
       function extractUrlsFromText(text) {
@@ -415,10 +430,13 @@
         const candidateArticles = availableArticles.length ? availableArticles : newsItems;
         const shuffledItems = [...candidateArticles].sort(() => Math.random() - 0.5);
 
-        for (const article of shuffledItems) {
-          const variants = buildVariantTitles(article.title);
-          if (variants && variants.length >= 3) {
-            const options = variants.sort(() => Math.random() - 0.5);
+        for (let index = 0; index < shuffledItems.length; index += 1) {
+          const article = shuffledItems[index];
+          const fallbackArticle = shuffledItems[index + 1] || shuffledItems[0];
+          const variants = buildVariantTitles(article.title, fallbackArticle?.title);
+
+          if (variants && variants.length >= 2) {
+            const options = [...variants].sort(() => Math.random() - 0.5);
             recentArticleLinks.push(article.link);
             if (recentArticleLinks.length > 4) {
               recentArticleLinks.shift();
