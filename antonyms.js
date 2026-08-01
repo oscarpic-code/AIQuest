@@ -1,4 +1,4 @@
-const antonymMap = {
+window.antonymMap = {
   "abierto": ["cerrado", "tapado"],
   "aburrido": ["divertido", "entretenido"],
   "acercar": ["alejar", "separar"],
