@@ -329,6 +329,47 @@
         return [title, firstVariant, secondVariant].filter((value, index, array) => value && array.indexOf(value) === index);
       }
 
+      function extractUrlsFromText(text) {
+        if (!text) return [];
+        const regex = /https?:\/\/[^\s"'<>]+/g;
+        return [...text.matchAll(regex)].map(match => match[0].replace(/[),.;:!?]+$/, ''));
+      }
+
+      function normalizeArticleUrl(url) {
+        if (!url) return '';
+
+        try {
+          const parsedUrl = new URL(url);
+          const target = parsedUrl.searchParams.get('url');
+          if (target) {
+            return decodeURIComponent(target);
+          }
+        } catch (error) {
+          console.warn('No se pudo normalizar la URL:', error);
+        }
+
+        return url;
+      }
+
+      function resolveArticleUrl(item) {
+        const candidates = [item?.link, item?.guid, item?.url, item?.content, item?.description, item?.contentSnippet];
+
+        for (const candidate of candidates) {
+          if (!candidate) continue;
+
+          const urls = extractUrlsFromText(candidate);
+          for (const rawUrl of urls) {
+            const normalized = normalizeArticleUrl(rawUrl);
+            const isFeedRedirect = /news\.google\.com\/rss|rss2json\.com|google\.com\/url\?/.test(normalized);
+            if (normalized && !isFeedRedirect) {
+              return normalized;
+            }
+          }
+        }
+
+        return item?.link || '';
+      }
+
       async function fetchNewsHeadlines(maxItems = 12) {
         try {
           const response = await fetch(newsProxyUrl);
@@ -337,7 +378,7 @@
           return (data.items || [])
             .map(item => ({
               title: normalizeText(item.title),
-              link: item.link,
+              link: resolveArticleUrl(item),
               description: normalizeText(item.description)
             }))
             .filter(item => item.title && item.link)
