@@ -158,6 +158,16 @@
         background: #fff1f0;
       }
 
+      .clue-box {
+        margin-bottom: 16px;
+        border-radius: 16px;
+        padding: 16px;
+        background: #f7f8ff;
+        border: 1px solid #e3e7f1;
+        color: #42506b;
+        line-height: 1.5;
+      }
+
       .feedback {
         margin-top: 18px;
         border-radius: 16px;
@@ -203,6 +213,7 @@
           </div>
 
           <p id="statusText" class="status">Estamos buscando una noticia reciente sobre IA para que practiques.</p>
+          <div id="clueBox" class="clue-box" hidden></div>
           <div id="options" class="options"></div>
           <div id="feedback" class="feedback" hidden></div>
         </div>
@@ -216,6 +227,7 @@
       const startBtn = document.getElementById('startBtn');
       const nextBtn = document.getElementById('nextBtn');
       const statusText = document.getElementById('statusText');
+      const clueBox = document.getElementById('clueBox');
       const optionsContainer = document.getElementById('options');
       const feedbackBox = document.getElementById('feedback');
 
@@ -236,19 +248,26 @@
         loadRound();
       }
 
-      function normalizeTitle(title) {
-        return title.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      function normalizeText(text) {
+        return text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
       }
 
-      async function fetchNewsHeadlines(maxItems = 8) {
+      function createClueSnippet(text) {
+        const cleaned = normalizeText(text || '');
+        if (!cleaned) return 'Elige el titular correcto para esta noticia.';
+        return cleaned.length > 180 ? `${cleaned.slice(0, 177)}...` : cleaned;
+      }
+
+      async function fetchNewsHeadlines(maxItems = 12) {
         try {
           const response = await fetch(newsProxyUrl);
           if (!response.ok) throw new Error('No se pudo obtener la fuente');
           const data = await response.json();
           return (data.items || [])
             .map(item => ({
-              title: normalizeTitle(item.title),
-              link: item.link
+              title: normalizeText(item.title),
+              link: item.link,
+              description: normalizeText(item.description)
             }))
             .filter(item => item.title && item.link)
             .slice(0, maxItems);
@@ -259,13 +278,19 @@
       }
 
       function buildOptions(newsItems) {
-        const shuffled = [...newsItems].sort(() => Math.random() - 0.5);
-        const options = shuffled.slice(0, 3);
-        const correctArticle = options[Math.floor(Math.random() * options.length)];
-        return { options, correctArticle };
+        const correctArticle = newsItems[Math.floor(Math.random() * newsItems.length)];
+        const distractors = newsItems
+          .filter(item => item.title !== correctArticle.title)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 2);
+        const options = [correctArticle, ...distractors].sort(() => Math.random() - 0.5);
+        return { options, correctArticle, clue: createClueSnippet(correctArticle.description) };
       }
 
-      function renderOptions(options, correctArticle) {
+      function renderOptions(options, correctArticle, clue) {
+        clueBox.hidden = false;
+        clueBox.innerHTML = `<strong>Resumen:</strong><p>${clue}</p>`;
+
         optionsContainer.innerHTML = '';
         options.forEach(option => {
           const btn = document.createElement('button');
@@ -288,7 +313,7 @@
         });
 
         if (selected.title === correctArticle.title) {
-          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular que estaba en juego.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
+          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular que corresponde a la pista.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
         } else {
           feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
         }
@@ -300,16 +325,18 @@
         statusText.textContent = 'Estamos recopilando titulares recientes sobre IA para que practiques.';
         feedbackBox.hidden = true;
         feedbackBox.innerHTML = '';
+        clueBox.hidden = true;
+        clueBox.innerHTML = '';
         optionsContainer.innerHTML = '<p class="hint">Cargando titulares...</p>';
 
-        const newsItems = await fetchNewsHeadlines(10);
+        const newsItems = await fetchNewsHeadlines(15);
         if (newsItems.length < 3) {
           optionsContainer.innerHTML = '<p class="hint">No se pudieron cargar titulares en este momento. Inténtalo de nuevo.</p>';
           return;
         }
 
-        const { options, correctArticle } = buildOptions(newsItems);
-        renderOptions(options, correctArticle);
+        const { options, correctArticle, clue } = buildOptions(newsItems);
+        renderOptions(options, correctArticle, clue);
         statusText.textContent = 'Elige el titular que corresponde a la noticia que está en juego.';
       }
 
