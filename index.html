@@ -294,19 +294,23 @@
         return getRandomHeadline();
       }
 
-      function createAlteredTitle(title) {
-        const words = title.toLowerCase().split(/(\s+)/);
+      function createAlteredTitle(title, avoidWord = '') {
+        const words = title.split(/(\s+)/);
         const candidates = [];
 
         words.forEach((word, index) => {
           const normalized = word.replace(/[¿?¡!.,;:()]/g, '').toLowerCase();
           if (antonymMap[normalized]) {
-            const replacement = antonymMap[normalized][Math.floor(Math.random() * antonymMap[normalized].length)];
             const originalWord = word.replace(/[¿?¡!.,;:()]/g, '');
+            if (originalWord.toLowerCase() === avoidWord.toLowerCase()) {
+              return;
+            }
+
+            const replacement = antonymMap[normalized][Math.floor(Math.random() * antonymMap[normalized].length)];
             const newWord = originalWord === originalWord.toUpperCase()
               ? replacement.toUpperCase()
               : replacement;
-            candidates.push({ index, word: originalWord, replacement: newWord });
+            candidates.push({ index, replacement: newWord, originalWord });
           }
         });
 
@@ -322,7 +326,7 @@
 
       function buildOptions(correctTitle) {
         const alteredOne = createAlteredTitle(correctTitle);
-        const alteredTwo = createAlteredTitle(correctTitle);
+        const alteredTwo = createAlteredTitle(correctTitle, alteredOne);
         const options = [correctTitle, alteredOne, alteredTwo].filter(Boolean);
         return options.sort(() => Math.random() - 0.5);
       }
