@@ -387,19 +387,16 @@
         return link.length > 30 ? `${link.slice(0, 30)}...` : link;
       }
 
-      function buildJinaUrl(url) {
-        const cleanUrl = url.replace(/^https?:\/\//i, '');
-        return `https://r.jina.ai/http://${cleanUrl}`;
+      function buildAiSummaryUrl(url) {
+        if (!url) return '';
+        const prompt = `Resume esta noticia en 3 puntos muy breves y claros. URL: ${url}`;
+        return `https://www.perplexity.ai/search?q=${encodeURIComponent(prompt)}`;
       }
 
       function createSummaryLink(article) {
         const url = article?.link || article?.url || '';
         if (!url) return '';
-        return `<a class="summary-link" href="${buildJinaUrl(url)}" target="_blank" rel="noreferrer">Ver resumen</a>`;
-      }
-
-      function createBlockedSummaryMessage() {
-        return '<p class="hint">La vista de resumen de Jina no está disponible en este momento para esta noticia.</p>';
+        return `<a class="summary-link" href="${buildAiSummaryUrl(url)}" target="_blank" rel="noreferrer">Abrir resumen con IA</a>`;
       }
 
       async function handleAnswer(selected, correctArticle) {
@@ -419,27 +416,8 @@
           feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>${summaryLink}`;
         }
 
+        feedbackBox.insertAdjacentHTML('beforeend', '<p class="hint">Abre el resumen con una IA gratuita desde el enlace anterior.</p>');
         feedbackBox.hidden = false;
-
-        try {
-          const response = await fetch(buildJinaUrl(correctArticle.link), {
-            headers: {
-              Accept: 'text/plain'
-            }
-          });
-
-          if (!response.ok) {
-            throw new Error(`Jina respondió con ${response.status}`);
-          }
-
-          const text = await response.text();
-          if (text && text.trim()) {
-            feedbackBox.insertAdjacentHTML('beforeend', '<p class="hint">La vista de resumen está disponible.</p>');
-          }
-        } catch (error) {
-          console.warn('No se pudo abrir la vista de resumen:', error);
-          feedbackBox.insertAdjacentHTML('beforeend', createBlockedSummaryMessage());
-        }
       }
 
       async function loadRound() {
