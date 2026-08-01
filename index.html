@@ -222,6 +222,7 @@
 
       let currentCorrectTitle = '';
       let currentLink = '';
+      let recentArticleLinks = [];
 
       const newsFeedUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
       const newsProxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(newsFeedUrl)}`;
@@ -330,12 +331,18 @@
       }
 
       function buildOptions(newsItems) {
-        const shuffledItems = [...newsItems].sort(() => Math.random() - 0.5);
+        const availableArticles = newsItems.filter(article => !recentArticleLinks.includes(article.link));
+        const candidateArticles = availableArticles.length ? availableArticles : newsItems;
+        const shuffledItems = [...candidateArticles].sort(() => Math.random() - 0.5);
 
         for (const article of shuffledItems) {
           const variants = buildVariantTitles(article.title);
           if (variants && variants.length >= 3) {
             const options = variants.sort(() => Math.random() - 0.5);
+            recentArticleLinks.push(article.link);
+            if (recentArticleLinks.length > 4) {
+              recentArticleLinks.shift();
+            }
             return { options, correctArticle: article };
           }
         }
