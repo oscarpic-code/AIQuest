@@ -175,6 +175,13 @@
         margin-top: 8px;
       }
 
+      .summary {
+        margin-top: 10px;
+        color: var(--text);
+        line-height: 1.55;
+        font-size: 0.95rem;
+      }
+
       @media (max-width: 760px) {
         .app { padding: 18px; }
         .options { grid-template-columns: 1fr; }
@@ -223,6 +230,8 @@
       let currentCorrectTitle = '';
       let currentLink = '';
       let recentArticleLinks = [];
+      const summaryCache = new Map();
+      const pendingSummaryRequests = new Map();
 
       const newsFeedUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
       const newsProxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(newsFeedUrl)}`;
@@ -369,7 +378,141 @@
         return link.length > 30 ? `${link.slice(0, 30)}...` : link;
       }
 
-      function handleAnswer(selected, correctArticle) {
+      function normalizeSummaryText(text) {
+        return text.replace(/\s+/g, ' ').trim();
+      }
+
+      function splitIntoSentences(text) {
+        return text
+          .split(/(?<=[.!?])\s+/)
+          .map(sentence => sentence.replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+      }
+
+      function summarizeWithExtractiveAlgorithm(text) {
+        const sentences = splitIntoSentences(text);
+        if (!sentences.length) return '';
+        if (sentences.length === 1) return normalizeSummaryText(sentences[0]);
+
+        const stopWords = new Set(['el', 'la', 'de', 'que', 'y', 'a', 'en', 'un', 'una', 'los', 'las', 'del', 'al', 'por', 'para', 'con', 'su', 'sus', 'se', 'como', 'ha', 'han', 'este', 'esta', 'es', 'son', 'pero', 'más', 'una', 'sobre', 'sin', 'entre', 'después', 'cuando', 'también', 'fue', 'ser', 'tener']);
+        const frequency = new Map();
+        const tokenizedText = text
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+          .split(/\s+/)
+          .filter(token => token && !stopWords.has(token));
+
+        tokenizedText.forEach(token => {
+          frequency.set(token, (frequency.get(token) || 0) + 1);
+        });
+
+        const scoredSentences = sentences.map((sentence, index) => {
+          const sentenceTokens = sentence
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+            .split(/\s+/)
+            .filter(Boolean);
+
+          const score = sentenceTokens.reduce((total, token) => total + (frequency.get(token) || 0), 0);
+          return { index, sentence, score };
+        });
+
+        const selectedSentences = scoredSentences
+          .sort((a, b) => b.score - a.score || a.index - b.index)
+          .slice(0, Math.min(3, sentences.length))
+          .sort((a, b) => a.index - b.index);
+
+        const summary = selectedSentences.map(item => item.sentence).join(' ');
+        const words = summary.split(/\s+/);
+        if (words.length > 60) {
+          return `${words.slice(0, 60).join(' ')}...`;
+        }
+        return normalizeSummaryText(summary);
+      }
+
+      async function summarizeWithBrowserAI(text) {
+        const aiApi = window.ai;
+        const candidates = [
+          aiApi?.summarize,
+          aiApi?.summarizer?.summarize,
+          aiApi?.summarizer?.createSummary
+        ];
+
+        for (const candidate of candidates) {
+          if (typeof candidate !== 'function') continue;
+
+          try {
+            const result = await candidate(text);
+            const summary = typeof result === 'string' ? result : result?.summary || result?.text || '';
+            if (summary && summary.trim()) return normalizeSummaryText(summary);
+          } catch (error) {
+            console.warn('No se pudo usar la API de resumen del navegador:', error);
+          }
+
+          try {
+            const result = await candidate({ text, maxLength: 160 });
+            const summary = typeof result === 'string' ? result : result?.summary || result?.text || '';
+            if (summary && summary.trim()) return normalizeSummaryText(summary);
+          } catch (error) {
+            console.warn('No se pudo usar la API de resumen del navegador con formato alternativo:', error);
+          }
+        }
+
+        return '';
+      }
+
+      async function getArticleSummary(article) {
+        const url = article?.link || article?.url || '';
+        if (!url) return '';
+
+        const cacheKey = url.trim().replace(/\/$/, '');
+        if (summaryCache.has(cacheKey)) {
+          return summaryCache.get(cacheKey);
+        }
+
+        if (pendingSummaryRequests.has(cacheKey)) {
+          return pendingSummaryRequests.get(cacheKey);
+        }
+
+        const pendingRequest = (async () => {
+          try {
+            const response = await fetch(`https://r.jina.ai/http://${url}`, {
+              headers: {
+                Accept: 'text/plain'
+              }
+            });
+
+            if (!response.ok) {
+              throw new Error(`No se pudo leer la noticia (${response.status})`);
+            }
+
+            const rawText = await response.text();
+            let summary = await summarizeWithBrowserAI(rawText);
+            if (!summary) {
+              summary = summarizeWithExtractiveAlgorithm(rawText);
+            }
+
+            if (!summary) {
+              throw new Error('Resumen vacío');
+            }
+
+            summaryCache.set(cacheKey, summary);
+            return summary;
+          } catch (error) {
+            console.warn('No se pudo generar el resumen:', error);
+            const fallbackMessage = 'No ha sido posible generar el resumen.';
+            summaryCache.set(cacheKey, fallbackMessage);
+            return fallbackMessage;
+          } finally {
+            pendingSummaryRequests.delete(cacheKey);
+          }
+        })();
+
+        pendingSummaryRequests.set(cacheKey, pendingRequest);
+        return pendingRequest;
+      }
+
+      async function handleAnswer(selected, correctArticle) {
         const buttons = Array.from(optionsContainer.querySelectorAll('.option'));
         buttons.forEach(button => {
           const isCorrect = button.textContent === correctArticle.title;
@@ -378,14 +521,19 @@
         });
 
         const shortLink = formatLink(correctArticle.link);
+        const summaryPlaceholder = '<p class="hint summary">Generando resumen...</p>';
 
         if (selected === correctArticle.title) {
-          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular real.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>`;
+          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular real.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>${summaryPlaceholder}`;
         } else {
-          feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>`;
+          feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>${summaryPlaceholder}`;
         }
 
         feedbackBox.hidden = false;
+
+        const summary = await getArticleSummary(correctArticle);
+        const summaryHtml = `<p class="summary"><strong>Resumen:</strong> ${summary}</p>`;
+        feedbackBox.insertAdjacentHTML('beforeend', summaryHtml);
       }
 
       async function loadRound() {
