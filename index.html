@@ -158,16 +158,6 @@
         background: #fff1f0;
       }
 
-      .clue-box {
-        margin-bottom: 16px;
-        border-radius: 16px;
-        padding: 16px;
-        background: #f7f8ff;
-        border: 1px solid #e3e7f1;
-        color: #42506b;
-        line-height: 1.5;
-      }
-
       .feedback {
         margin-top: 18px;
         border-radius: 16px;
@@ -213,7 +203,6 @@
           </div>
 
           <p id="statusText" class="status">Estamos buscando una noticia reciente sobre IA para que practiques.</p>
-          <div id="clueBox" class="clue-box" hidden></div>
           <div id="options" class="options"></div>
           <div id="feedback" class="feedback" hidden></div>
         </div>
@@ -227,7 +216,6 @@
       const startBtn = document.getElementById('startBtn');
       const nextBtn = document.getElementById('nextBtn');
       const statusText = document.getElementById('statusText');
-      const clueBox = document.getElementById('clueBox');
       const optionsContainer = document.getElementById('options');
       const feedbackBox = document.getElementById('feedback');
 
@@ -236,6 +224,30 @@
 
       const newsFeedUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
       const newsProxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(newsFeedUrl)}`;
+      const antonymMap = {
+        ayuda: ['dificulta', 'complica'],
+        mejora: ['empeora', 'degrada'],
+        nueva: ['vieja', 'antigua'],
+        nuevo: ['viejo', 'antiguo'],
+        grande: ['pequeño', 'reducido'],
+        gran: ['pequeño', 'reducido'],
+        rápida: ['lenta', 'tardía'],
+        rápido: ['lento', 'tardío'],
+        importante: ['irrelevante', 'secundario'],
+        potencia: ['debilidad', 'limitación'],
+        potente: ['débil', 'limitado'],
+        aumenta: ['disminuye', 'decrece'],
+        crece: ['decrece', 'disminuye'],
+        avanza: ['retrocede', 'se detiene'],
+        interpreta: ['desinterpreta', 'malinterpreta'],
+        sorprendente: ['decepcionante', 'mediocre'],
+        moderna: ['antigua', 'vieja'],
+        moderno: ['antiguo', 'viejo'],
+        real: ['falsa', 'inventada'],
+        fácil: ['difícil', 'complicado'],
+        clara: ['confusa', 'oscura'],
+        claro: ['confuso', 'oscuro']
+      };
 
       function showScreen(screenId) {
         splashScreen.classList.remove('active');
@@ -252,10 +264,40 @@
         return text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
       }
 
-      function createClueSnippet(text) {
-        const cleaned = normalizeText(text || '');
-        if (!cleaned) return 'Elige el titular correcto para esta noticia.';
-        return cleaned.length > 180 ? `${cleaned.slice(0, 177)}...` : cleaned;
+      function extractLongWords(title) {
+        return title
+          .split(/(\s+)/)
+          .map(word => word.trim())
+          .filter(Boolean)
+          .filter(word => /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(word))
+          .sort((a, b) => b.length - a.length);
+      }
+
+      function replaceWithAntonym(text) {
+        const words = text.split(/(\s+)/);
+        const longWords = extractLongWords(text);
+        const targetWords = longWords.slice(0, 2);
+
+        return words.map(word => {
+          const cleanedWord = word.replace(/[¿?¡!.,;:()]/g, '');
+          if (!cleanedWord) return word;
+          const normalized = cleanedWord.toLowerCase();
+          const antonyms = antonymMap[normalized];
+          if (!antonyms || !antonyms.length) return word;
+
+          const shouldReplace = targetWords.some(target => target.toLowerCase() === normalized);
+          if (!shouldReplace) return word;
+
+          const replacement = antonyms[Math.floor(Math.random() * antonyms.length)];
+          return word === cleanedWord ? replacement : replacement;
+        }).join('');
+      }
+
+      function buildVariantTitles(correctTitle) {
+        const title = normalizeText(correctTitle);
+        const firstVariant = replaceWithAntonym(title);
+        const secondVariant = replaceWithAntonym(title);
+        return [title, firstVariant, secondVariant].filter((value, index, array) => value && array.indexOf(value) === index);
       }
 
       async function fetchNewsHeadlines(maxItems = 12) {
@@ -279,23 +321,18 @@
 
       function buildOptions(newsItems) {
         const correctArticle = newsItems[Math.floor(Math.random() * newsItems.length)];
-        const distractors = newsItems
-          .filter(item => item.title !== correctArticle.title)
-          .sort(() => Math.random() - 0.5)
-          .slice(0, 2);
-        const options = [correctArticle, ...distractors].sort(() => Math.random() - 0.5);
-        return { options, correctArticle, clue: createClueSnippet(correctArticle.description) };
+        const correctTitle = correctArticle.title;
+        const variants = buildVariantTitles(correctTitle);
+        const options = variants.sort(() => Math.random() - 0.5);
+        return { options, correctArticle };
       }
 
-      function renderOptions(options, correctArticle, clue) {
-        clueBox.hidden = false;
-        clueBox.innerHTML = `<strong>Resumen:</strong><p>${clue}</p>`;
-
+      function renderOptions(options, correctArticle) {
         optionsContainer.innerHTML = '';
         options.forEach(option => {
           const btn = document.createElement('button');
           btn.className = 'option';
-          btn.textContent = option.title;
+          btn.textContent = option;
           btn.addEventListener('click', () => handleAnswer(option, correctArticle));
           optionsContainer.appendChild(btn);
         });
@@ -312,8 +349,8 @@
           button.disabled = true;
         });
 
-        if (selected.title === correctArticle.title) {
-          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular que corresponde a la pista.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
+        if (selected === correctArticle.title) {
+          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular real.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
         } else {
           feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
         }
@@ -325,8 +362,6 @@
         statusText.textContent = 'Estamos recopilando titulares recientes sobre IA para que practiques.';
         feedbackBox.hidden = true;
         feedbackBox.innerHTML = '';
-        clueBox.hidden = true;
-        clueBox.innerHTML = '';
         optionsContainer.innerHTML = '<p class="hint">Cargando titulares...</p>';
 
         const newsItems = await fetchNewsHeadlines(15);
@@ -335,8 +370,8 @@
           return;
         }
 
-        const { options, correctArticle, clue } = buildOptions(newsItems);
-        renderOptions(options, correctArticle, clue);
+        const { options, correctArticle } = buildOptions(newsItems);
+        renderOptions(options, correctArticle);
         statusText.textContent = 'Elige el titular que corresponde a la noticia que está en juego.';
       }
 
