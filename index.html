@@ -242,11 +242,8 @@
       let currentCorrectTitle = '';
       let currentLink = '';
       let recentArticleLinks = [];
-      const newsFeedUrls = [
-        'https://www.theverge.com/rss/index.xml',
-        'https://feeds.feedburner.com/TechCrunch/',
-        'https://hnrss.org/newest'
-      ];
+      const newsFeedUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
+      const newsProxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(newsFeedUrl)}`;
       const antonymMap = window.antonymMap || {};
 
       function showScreen(screenId) {
@@ -307,122 +304,48 @@
         return replaced ? result : null;
       }
 
-      function buildVariantTitles(correctTitle, fallbackTitle = '') {
+      function buildVariantTitles(correctTitle) {
         const title = normalizeText(correctTitle);
-        const variants = [title];
         const replaceableWords = getReplaceableWords(title);
 
-        if (replaceableWords.length) {
-          const firstWord = replaceableWords[0];
-          const firstVariant = replaceWordWithAntonym(title, firstWord);
-          if (firstVariant) {
-            variants.push(firstVariant);
-          }
-
-          const secondWord = replaceableWords.find(word => word.toLowerCase() !== firstWord.toLowerCase());
-          if (secondWord) {
-            const secondVariant = replaceWordWithAntonym(title, secondWord, [firstWord.toLowerCase()]);
-            if (secondVariant) {
-              variants.push(secondVariant);
-            }
-          }
+        if (replaceableWords.length < 2) {
+          return null;
         }
 
-        if (variants.length < 3 && fallbackTitle) {
-          const fallbackNormalized = normalizeText(fallbackTitle);
-          const fallbackWords = getReplaceableWords(fallbackNormalized);
+        const firstWord = replaceableWords[0];
+        const secondWord = replaceableWords.find(word => word.toLowerCase() !== firstWord.toLowerCase());
 
-          if (fallbackWords.length) {
-            const fallbackVariant = replaceWordWithAntonym(fallbackNormalized, fallbackWords[0]);
-            if (fallbackVariant && fallbackVariant !== title) {
-              variants.push(fallbackVariant);
-            }
-          }
-
-          if (variants.length < 3 && fallbackNormalized !== title) {
-            variants.push(fallbackNormalized);
-          }
+        if (!secondWord) {
+          return null;
         }
 
-        return [...new Set(variants.filter(Boolean))].slice(0, 3);
-      }
+        const firstVariant = replaceWordWithAntonym(title, firstWord);
+        const secondVariant = replaceWordWithAntonym(title, secondWord, [firstWord.toLowerCase()]);
 
-      function extractUrlsFromText(text) {
-        if (!text) return [];
-        const regex = /https?:\/\/[^\s"'<>]+/g;
-        return [...text.matchAll(regex)].map(match => match[0].replace(/[),.;:!?]+$/, ''));
-      }
-
-      function normalizeArticleUrl(url) {
-        if (!url) return '';
-
-        try {
-          const parsedUrl = new URL(url);
-          const target = parsedUrl.searchParams.get('url');
-          if (target) {
-            return decodeURIComponent(target);
-          }
-        } catch (error) {
-          console.warn('No se pudo normalizar la URL:', error);
+        if (!firstVariant || !secondVariant) {
+          return null;
         }
 
-        return url;
-      }
-
-      function resolveArticleUrl(item) {
-        const candidates = [item?.link, item?.guid, item?.url, item?.content, item?.description, item?.contentSnippet];
-
-        for (const candidate of candidates) {
-          if (!candidate) continue;
-
-          const urls = extractUrlsFromText(candidate);
-          for (const rawUrl of urls) {
-            const normalized = normalizeArticleUrl(rawUrl);
-            const isFeedRedirect = /news\.google\.com\/rss|rss2json\.com|google\.com\/url\?/.test(normalized);
-            if (normalized && !isFeedRedirect) {
-              return normalized;
-            }
-          }
-        }
-
-        return item?.link || '';
+        return [title, firstVariant, secondVariant].filter((value, index, array) => value && array.indexOf(value) === index);
       }
 
       async function fetchNewsHeadlines(maxItems = 12) {
-        const collectedItems = [];
-
-        for (const feedUrl of newsFeedUrls) {
-          try {
-            const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}`;
-            const response = await fetch(proxyUrl);
-            if (!response.ok) continue;
-
-            const data = await response.json();
-            const mappedItems = (data.items || [])
-              .map(item => ({
-                title: normalizeText(item.title),
-                link: resolveArticleUrl(item),
-                description: normalizeText(item.description)
-              }))
-              .filter(item => item.title && item.link);
-
-            collectedItems.push(...mappedItems);
-            if (collectedItems.length >= maxItems) break;
-          } catch (error) {
-            console.warn(`No se pudo cargar la fuente ${feedUrl}:`, error);
-          }
+        try {
+          const response = await fetch(newsProxyUrl);
+          if (!response.ok) throw new Error('No se pudo obtener la fuente');
+          const data = await response.json();
+          return (data.items || [])
+            .map(item => ({
+              title: normalizeText(item.title),
+              link: item.link,
+              description: normalizeText(item.description)
+            }))
+            .filter(item => item.title && item.link)
+            .slice(0, maxItems);
+        } catch (error) {
+          console.warn('No se pudieron cargar titulares recientes:', error);
+          return [];
         }
-
-        const uniqueItems = [];
-        const seenLinks = new Set();
-
-        for (const item of collectedItems) {
-          if (seenLinks.has(item.link)) continue;
-          seenLinks.add(item.link);
-          uniqueItems.push(item);
-        }
-
-        return uniqueItems.slice(0, maxItems);
       }
 
       function buildOptions(newsItems) {
@@ -430,13 +353,10 @@
         const candidateArticles = availableArticles.length ? availableArticles : newsItems;
         const shuffledItems = [...candidateArticles].sort(() => Math.random() - 0.5);
 
-        for (let index = 0; index < shuffledItems.length; index += 1) {
-          const article = shuffledItems[index];
-          const fallbackArticle = shuffledItems[index + 1] || shuffledItems[0];
-          const variants = buildVariantTitles(article.title, fallbackArticle?.title);
-
-          if (variants && variants.length >= 2) {
-            const options = [...variants].sort(() => Math.random() - 0.5);
+        for (const article of shuffledItems) {
+          const variants = buildVariantTitles(article.title);
+          if (variants && variants.length >= 3) {
+            const options = variants.sort(() => Math.random() - 0.5);
             recentArticleLinks.push(article.link);
             if (recentArticleLinks.length > 4) {
               recentArticleLinks.shift();
@@ -467,18 +387,8 @@
         return link.length > 30 ? `${link.slice(0, 30)}...` : link;
       }
 
-      function buildAiSummaryUrl(article) {
-        const url = article?.link || article?.url || '';
-        if (!url) return '';
-        const title = article?.title ? `Título: ${article.title}. ` : '';
-        const prompt = `Resume esta noticia en 3 puntos muy breves y claros. ${title}URL: ${url}`;
-        return `https://www.perplexity.ai/search?q=${encodeURIComponent(prompt)}`;
-      }
-
       function createSummaryLink(article) {
-        const url = article?.link || article?.url || '';
-        if (!url) return '';
-        return `<a class="summary-link" href="${buildAiSummaryUrl(article)}" target="_blank" rel="noreferrer">Abrir resumen con IA</a>`;
+        return '';
       }
 
       async function handleAnswer(selected, correctArticle) {
@@ -490,15 +400,13 @@
         });
 
         const shortLink = formatLink(correctArticle.link);
-        const summaryLink = createSummaryLink(correctArticle);
 
         if (selected === correctArticle.title) {
-          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular real.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>${summaryLink}`;
+          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular real.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>`;
         } else {
-          feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>${summaryLink}`;
+          feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${shortLink}</a></p>`;
         }
 
-        feedbackBox.insertAdjacentHTML('beforeend', '<p class="hint">Abre el resumen con una IA gratuita desde el enlace anterior.</p>');
         feedbackBox.hidden = false;
       }
 
