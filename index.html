@@ -242,8 +242,11 @@
       let currentCorrectTitle = '';
       let currentLink = '';
       let recentArticleLinks = [];
-      const newsFeedUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
-      const newsProxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(newsFeedUrl)}`;
+      const newsFeedUrls = [
+        'https://www.theverge.com/rss/index.xml',
+        'https://feeds.feedburner.com/TechCrunch/',
+        'https://hnrss.org/newest'
+      ];
       const antonymMap = window.antonymMap || {};
 
       function showScreen(screenId) {
@@ -371,22 +374,40 @@
       }
 
       async function fetchNewsHeadlines(maxItems = 12) {
-        try {
-          const response = await fetch(newsProxyUrl);
-          if (!response.ok) throw new Error('No se pudo obtener la fuente');
-          const data = await response.json();
-          return (data.items || [])
-            .map(item => ({
-              title: normalizeText(item.title),
-              link: resolveArticleUrl(item),
-              description: normalizeText(item.description)
-            }))
-            .filter(item => item.title && item.link)
-            .slice(0, maxItems);
-        } catch (error) {
-          console.warn('No se pudieron cargar titulares recientes:', error);
-          return [];
+        const collectedItems = [];
+
+        for (const feedUrl of newsFeedUrls) {
+          try {
+            const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}`;
+            const response = await fetch(proxyUrl);
+            if (!response.ok) continue;
+
+            const data = await response.json();
+            const mappedItems = (data.items || [])
+              .map(item => ({
+                title: normalizeText(item.title),
+                link: resolveArticleUrl(item),
+                description: normalizeText(item.description)
+              }))
+              .filter(item => item.title && item.link);
+
+            collectedItems.push(...mappedItems);
+            if (collectedItems.length >= maxItems) break;
+          } catch (error) {
+            console.warn(`No se pudo cargar la fuente ${feedUrl}:`, error);
+          }
         }
+
+        const uniqueItems = [];
+        const seenLinks = new Set();
+
+        for (const item of collectedItems) {
+          if (seenLinks.has(item.link)) continue;
+          seenLinks.add(item.link);
+          uniqueItems.push(item);
+        }
+
+        return uniqueItems.slice(0, maxItems);
       }
 
       function buildOptions(newsItems) {
@@ -428,16 +449,18 @@
         return link.length > 30 ? `${link.slice(0, 30)}...` : link;
       }
 
-      function buildAiSummaryUrl(url) {
+      function buildAiSummaryUrl(article) {
+        const url = article?.link || article?.url || '';
         if (!url) return '';
-        const prompt = `Resume esta noticia en 3 puntos muy breves y claros. URL: ${url}`;
+        const title = article?.title ? `Título: ${article.title}. ` : '';
+        const prompt = `Resume esta noticia en 3 puntos muy breves y claros. ${title}URL: ${url}`;
         return `https://www.perplexity.ai/search?q=${encodeURIComponent(prompt)}`;
       }
 
       function createSummaryLink(article) {
         const url = article?.link || article?.url || '';
         if (!url) return '';
-        return `<a class="summary-link" href="${buildAiSummaryUrl(url)}" target="_blank" rel="noreferrer">Abrir resumen con IA</a>`;
+        return `<a class="summary-link" href="${buildAiSummaryUrl(article)}" target="_blank" rel="noreferrer">Abrir resumen con IA</a>`;
       }
 
       async function handleAnswer(selected, correctArticle) {
