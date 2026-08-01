@@ -242,39 +242,71 @@
         return text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
       }
 
-      function extractLongWords(title) {
-        return title
-          .split(/(\s+)/)
-          .map(word => word.trim())
+      function getReplaceableWords(text) {
+        const words = normalizeText(text)
+          .split(/\s+/)
+          .map(word => word.replace(/[¿?¡!.,;:()]/g, ''))
           .filter(Boolean)
-          .filter(word => /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(word))
-          .sort((a, b) => b.length - a.length);
+          .filter(word => /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(word));
+
+        const seen = new Set();
+        return words.filter(word => {
+          const normalized = word.toLowerCase();
+          if (seen.has(normalized)) return false;
+          seen.add(normalized);
+          const antonyms = antonymMap[normalized];
+          return Boolean(antonyms && antonyms.length);
+        });
       }
 
-      function replaceWithAntonym(text) {
+      function replaceWordWithAntonym(text, wordToReplace, excludedWords = []) {
+        const target = wordToReplace.toLowerCase();
         const words = text.split(/(\s+)/);
-        const longWords = extractLongWords(text);
-        const targetWords = longWords.slice(0, 2);
+        let replaced = false;
 
-        return words.map(word => {
-          const cleanedWord = word.replace(/[¿?¡!.,;:()]/g, '');
-          if (!cleanedWord) return word;
-          const normalized = cleanedWord.toLowerCase();
-          const antonyms = antonymMap[normalized];
-          if (!antonyms || !antonyms.length) return word;
+        const result = words.map(part => {
+          if (replaced) return part;
 
-          const shouldReplace = targetWords.some(target => target.toLowerCase() === normalized);
-          if (!shouldReplace) return word;
+          const cleanedPart = part.replace(/[¿?¡!.,;:()]/g, '');
+          if (!cleanedPart) return part;
 
-          const replacement = antonyms[Math.floor(Math.random() * antonyms.length)];
-          return word === cleanedWord ? replacement : replacement;
+          const normalizedPart = cleanedPart.toLowerCase();
+          if (normalizedPart === target && !excludedWords.includes(normalizedPart)) {
+            const antonyms = antonymMap[normalizedPart];
+            if (antonyms && antonyms.length) {
+              replaced = true;
+              return antonyms[Math.floor(Math.random() * antonyms.length)];
+            }
+          }
+
+          return part;
         }).join('');
+
+        return replaced ? result : null;
       }
 
       function buildVariantTitles(correctTitle) {
         const title = normalizeText(correctTitle);
-        const firstVariant = replaceWithAntonym(title);
-        const secondVariant = replaceWithAntonym(title);
+        const replaceableWords = getReplaceableWords(title);
+
+        if (replaceableWords.length < 2) {
+          return null;
+        }
+
+        const firstWord = replaceableWords[0];
+        const secondWord = replaceableWords.find(word => word.toLowerCase() !== firstWord.toLowerCase());
+
+        if (!secondWord) {
+          return null;
+        }
+
+        const firstVariant = replaceWordWithAntonym(title, firstWord);
+        const secondVariant = replaceWordWithAntonym(title, secondWord, [firstWord.toLowerCase()]);
+
+        if (!firstVariant || !secondVariant) {
+          return null;
+        }
+
         return [title, firstVariant, secondVariant].filter((value, index, array) => value && array.indexOf(value) === index);
       }
 
@@ -298,11 +330,17 @@
       }
 
       function buildOptions(newsItems) {
-        const correctArticle = newsItems[Math.floor(Math.random() * newsItems.length)];
-        const correctTitle = correctArticle.title;
-        const variants = buildVariantTitles(correctTitle);
-        const options = variants.sort(() => Math.random() - 0.5);
-        return { options, correctArticle };
+        const shuffledItems = [...newsItems].sort(() => Math.random() - 0.5);
+
+        for (const article of shuffledItems) {
+          const variants = buildVariantTitles(article.title);
+          if (variants && variants.length >= 3) {
+            const options = variants.sort(() => Math.random() - 0.5);
+            return { options, correctArticle: article };
+          }
+        }
+
+        return null;
       }
 
       function renderOptions(options, correctArticle) {
@@ -348,7 +386,13 @@
           return;
         }
 
-        const { options, correctArticle } = buildOptions(newsItems);
+        const builtOptions = buildOptions(newsItems);
+        if (!builtOptions) {
+          optionsContainer.innerHTML = '<p class="hint">No se pudo encontrar un titular con palabras modificables en este momento. Inténtalo de nuevo.</p>';
+          return;
+        }
+
+        const { options, correctArticle } = builtOptions;
         renderOptions(options, correctArticle);
         statusText.textContent = 'Elige el titular que corresponde a la noticia que está en juego.';
       }
