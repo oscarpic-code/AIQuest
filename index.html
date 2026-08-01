@@ -222,49 +222,8 @@
       let currentCorrectTitle = '';
       let currentLink = '';
 
-      const fallbackHeadlines = [
-        {
-          title: 'OpenAI presenta nuevas herramientas para acelerar tareas con inteligencia artificial',
-          link: 'https://example.com/ai-tools'
-        },
-        {
-          title: 'Las grandes empresas invierten más en modelos generativos para automatizar procesos',
-          link: 'https://example.com/ai-investment'
-        },
-        {
-          title: 'La IA ya ayuda a traducir idiomas con una precisión sorprendente',
-          link: 'https://example.com/ai-translation'
-        }
-      ];
-
-      const antonymMap = {
-        nuevo: ['viejo', 'antiguo'],
-        nueva: ['vieja', 'antigua'],
-        mejora: ['empeora', 'degrada'],
-        mejor: ['peor', 'inferior'],
-        rápida: ['lenta', 'tardía'],
-        rápido: ['lento', 'tardío'],
-        grande: ['pequeño', 'reducido'],
-        gran: ['pequeño', 'reducido'],
-        aumenta: ['disminuye', 'decrece'],
-        importante: ['irrelevante', 'secundario'],
-        avanza: ['retrocede', 'se detiene'],
-        potente: ['débil', 'limitado'],
-        poderoso: ['débil', 'limitado'],
-        ayuda: ['dificulta', 'complica'],
-        mejora: ['empeora', 'degrada'],
-        crece: ['decrece', 'disminuye'],
-        interpreta: ['desinterpreta', 'malinterpreta'],
-        sorprendente: ['decepcionante', 'mediocre'],
-        maestra: ['mediocre', 'inferior'],
-        maestro: ['mediocre', 'inferior'],
-        obra: ['copia', 'imitación'],
-        real: ['falsa', 'inventada'],
-        fácil: ['difícil', 'complicado'],
-        moderna: ['antigua', 'vieja'],
-        moderno: ['antiguo', 'viejo'],
-        importante: ['irrelevante', 'secundario']
-      };
+      const newsFeedUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
+      const newsProxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(newsFeedUrl)}`;
 
       function showScreen(screenId) {
         splashScreen.classList.remove('active');
@@ -277,120 +236,81 @@
         loadRound();
       }
 
-      function getRandomHeadline() {
-        const pick = fallbackHeadlines[Math.floor(Math.random() * fallbackHeadlines.length)];
-        return { ...pick };
+      function normalizeTitle(title) {
+        return title.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
       }
 
-      async function fetchHeadline() {
-        const rssUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
-        const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
-
+      async function fetchNewsHeadlines(maxItems = 8) {
         try {
-          const response = await fetch(proxyUrl);
-          if (!response.ok) throw new Error('No se pudo obtener la noticia');
+          const response = await fetch(newsProxyUrl);
+          if (!response.ok) throw new Error('No se pudo obtener la fuente');
           const data = await response.json();
-          const item = (data.items || []).find(item => item.title && item.link) || null;
-          if (item) {
-            return {
-              title: item.title.replace(/<[^>]*>/g, '').trim(),
+          return (data.items || [])
+            .map(item => ({
+              title: normalizeTitle(item.title),
               link: item.link
-            };
-          }
+            }))
+            .filter(item => item.title && item.link)
+            .slice(0, maxItems);
         } catch (error) {
-          console.warn('Usando titulares de respaldo:', error);
+          console.warn('No se pudieron cargar titulares recientes:', error);
+          return [];
         }
-
-        return getRandomHeadline();
       }
 
-      function createAlteredTitle(title, avoidTitles = []) {
-        const words = title.split(/(\s+)/);
-        const candidates = [];
-
-        words.forEach((word, index) => {
-          const originalWord = word.replace(/[¿?¡!.,;:()]/g, '');
-          const normalized = originalWord.toLowerCase();
-          const replacements = antonymMap[normalized];
-
-          if (replacements && replacements.length) {
-            const replacement = replacements[Math.floor(Math.random() * replacements.length)];
-            const newWord = originalWord === originalWord.toUpperCase()
-              ? replacement.toUpperCase()
-              : replacement;
-            candidates.push({ index, replacement: newWord });
-          }
-        });
-
-        if (candidates.length === 0) {
-          return title;
-        }
-
-        for (let attempt = 0; attempt < 12; attempt += 1) {
-          const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-          const parts = title.split(/(\s+)/);
-          parts[chosen.index] = chosen.replacement;
-          const candidateTitle = parts.join('');
-
-          if (candidateTitle !== title && !avoidTitles.includes(candidateTitle)) {
-            return candidateTitle;
-          }
-        }
-
-        return title;
+      function buildOptions(newsItems) {
+        const shuffled = [...newsItems].sort(() => Math.random() - 0.5);
+        const options = shuffled.slice(0, 3);
+        const correctArticle = options[Math.floor(Math.random() * options.length)];
+        return { options, correctArticle };
       }
 
-      function buildOptions(correctTitle) {
-        const alteredOne = createAlteredTitle(correctTitle);
-        const alteredTwo = createAlteredTitle(correctTitle, [alteredOne, correctTitle]);
-        const options = [correctTitle, alteredOne, alteredTwo].filter(Boolean);
-        return options.sort(() => Math.random() - 0.5);
-      }
-
-      function renderOptions(options, correctTitle, link) {
+      function renderOptions(options, correctArticle) {
         optionsContainer.innerHTML = '';
         options.forEach(option => {
           const btn = document.createElement('button');
           btn.className = 'option';
-          btn.textContent = option;
-          btn.addEventListener('click', () => handleAnswer(option, correctTitle, link));
+          btn.textContent = option.title;
+          btn.addEventListener('click', () => handleAnswer(option, correctArticle));
           optionsContainer.appendChild(btn);
         });
 
-        currentCorrectTitle = correctTitle;
-        currentLink = link;
+        currentCorrectTitle = correctArticle.title;
+        currentLink = correctArticle.link;
       }
 
-      function handleAnswer(selected, correctTitle, link) {
+      function handleAnswer(selected, correctArticle) {
         const buttons = Array.from(optionsContainer.querySelectorAll('.option'));
         buttons.forEach(button => {
-          const isCorrect = button.textContent === correctTitle;
+          const isCorrect = button.textContent === correctArticle.title;
           button.classList.toggle('correct', isCorrect);
-          button.classList.toggle('wrong', button.textContent === selected && !isCorrect);
           button.disabled = true;
         });
 
-        if (selected === correctTitle) {
-          feedbackBox.innerHTML = `<strong>¡Muy bien! Has encontrado el titular correcto.</strong><p>${correctTitle}</p><p class="hint">Abre la noticia original aquí: <a href="${link}" target="_blank" rel="noreferrer">${link}</a></p>`;
-          feedbackBox.style.borderColor = 'rgba(31, 157, 104, 0.3)';
+        if (selected.title === correctArticle.title) {
+          feedbackBox.innerHTML = `<strong>¡Correcto!</strong><p>Has elegido el titular que estaba en juego.</p><p class="hint">Lee la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
         } else {
-          feedbackBox.innerHTML = `<strong>Prueba otra vez.</strong><p>La noticia real era:</p><p><strong>${correctTitle}</strong></p><p class="hint">Abre la noticia original aquí: <a href="${link}" target="_blank" rel="noreferrer">${link}</a></p>`;
-          feedbackBox.style.borderColor = 'rgba(217, 83, 79, 0.3)';
+          feedbackBox.innerHTML = `<strong>¡Buen intento!</strong><p>El titular correcto es:</p><p><strong>${correctArticle.title}</strong></p><p class="hint">Puedes abrir la noticia original aquí: <a href="${correctArticle.link}" target="_blank" rel="noreferrer">${correctArticle.link}</a></p>`;
         }
 
         feedbackBox.hidden = false;
       }
 
       async function loadRound() {
-        statusText.textContent = 'Estamos buscando una noticia reciente sobre IA para que practiques.';
+        statusText.textContent = 'Estamos recopilando titulares recientes sobre IA para que practiques.';
         feedbackBox.hidden = true;
         feedbackBox.innerHTML = '';
-        optionsContainer.innerHTML = '<p class="hint">Cargando noticia...</p>';
+        optionsContainer.innerHTML = '<p class="hint">Cargando titulares...</p>';
 
-        const article = await fetchHeadline();
-        const options = buildOptions(article.title);
-        renderOptions(options, article.title, article.link);
-        statusText.textContent = 'Elige la opción que corresponde al titular real de una noticia reciente sobre IA.';
+        const newsItems = await fetchNewsHeadlines(10);
+        if (newsItems.length < 3) {
+          optionsContainer.innerHTML = '<p class="hint">No se pudieron cargar titulares en este momento. Inténtalo de nuevo.</p>';
+          return;
+        }
+
+        const { options, correctArticle } = buildOptions(newsItems);
+        renderOptions(options, correctArticle);
+        statusText.textContent = 'Elige el titular que corresponde a la noticia que está en juego.';
       }
 
       document.addEventListener('DOMContentLoaded', () => {
