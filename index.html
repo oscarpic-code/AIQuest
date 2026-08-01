@@ -382,6 +382,41 @@
         return text.replace(/\s+/g, ' ').trim();
       }
 
+      function extractJinaContent(rawText) {
+        if (!rawText) return '';
+
+        const normalized = rawText.replace(/\r/g, '');
+        const lines = normalized.split('\n').map(line => line.trim()).filter(Boolean);
+
+        const headerPatterns = [
+          /^Title:/i,
+          /^URL:/i,
+          /^Source:/i,
+          /^Markdown Content:/i,
+          /^Content:/i,
+          /^Summary:/i,
+          /^# /,
+          /^## /
+        ];
+
+        const contentLines = lines.filter(line => !headerPatterns.some(pattern => pattern.test(line)));
+
+        if (contentLines.length) {
+          return contentLines.join(' ');
+        }
+
+        const cleaned = normalized
+          .replace(/^Title:\s.*?\n/i, '')
+          .replace(/^URL:\s.*?\n/i, '')
+          .replace(/^Source:\s.*?\n/i, '')
+          .replace(/^Markdown Content:\s*/i, '')
+          .replace(/^Content:\s*/i, '')
+          .replace(/^Summary:\s*/i, '')
+          .trim();
+
+        return cleaned;
+      }
+
       function splitIntoSentences(text) {
         return text
           .split(/(?<=[.!?])\s+/)
@@ -487,9 +522,10 @@
             }
 
             const rawText = await response.text();
-            let summary = await summarizeWithBrowserAI(rawText);
+            const jinaContent = extractJinaContent(rawText);
+            let summary = await summarizeWithBrowserAI(jinaContent || rawText);
             if (!summary) {
-              summary = summarizeWithExtractiveAlgorithm(rawText);
+              summary = summarizeWithExtractiveAlgorithm(jinaContent || rawText);
             }
 
             if (!summary) {
