@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AIQuest</title>
+    <meta name="description" content="Aprende sobre inteligencia artificial jugando con noticias reales." />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8ff;
+        --text: #132238;
+        --accent: #5b5bff;
+        --accent-strong: #4141d8;
+        --accent-soft: #e8eaff;
+        --success: #1f9d68;
+        --danger: #d9534f;
+        --card: rgba(255, 255, 255, 0.95);
+        --shadow: 0 18px 40px rgba(31, 41, 55, 0.12);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #f7f8ff 0%, #eef3ff 100%);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      .app {
+        width: min(100%, 1100px);
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .screen { display: none; }
+      .screen.active { display: block; }
+
+      .splash {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+
+      .splash-card {
+        background: var(--card);
+        padding: 48px 36px;
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.6s ease;
+      }
+
+      .splash-card.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .title {
+        margin: 0 0 10px;
+        font-size: clamp(3rem, 7vw, 5rem);
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        color: var(--accent-strong);
+      }
+
+      .subtitle {
+        margin: 0 0 22px;
+        font-size: 1.05rem;
+        color: #52607a;
+      }
+
+      .btn {
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 22px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+        color: white;
+        box-shadow: 0 10px 20px rgba(91, 91, 255, 0.24);
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      .btn:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(91, 91, 255, 0.28); }
+      .btn-secondary { background: #f2f4ff; color: var(--accent-strong); box-shadow: none; }
+
+      .game-shell {
+        background: var(--card);
+        border-radius: 28px;
+        padding: 28px;
+        box-shadow: var(--shadow);
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--accent);
+      }
+
+      h2 { margin: 0; font-size: clamp(1.3rem, 3vw, 1.8rem); }
+
+      .status {
+        margin: 0 0 20px;
+        color: #5b6780;
+        line-height: 1.5;
+      }
+
+      .options {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .option {
+        border: 2px solid #e8ebf6;
+        background: white;
+        border-radius: 18px;
+        padding: 18px;
+        text-align: left;
+        min-height: 120px;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1.45;
+        color: var(--text);
+        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      .option:hover {
+        transform: translateY(-2px);
+        border-color: var(--accent);
+        box-shadow: 0 10px 18px rgba(91, 91, 255, 0.12);
+      }
+
+      .option.correct {
+        border-color: var(--success);
+        background: #eefcf5;
+      }
+
+      .option.wrong {
+        border-color: var(--danger);
+        background: #fff1f0;
+      }
+
+      .feedback {
+        margin-top: 18px;
+        border-radius: 16px;
+        padding: 16px;
+        background: #f7f8ff;
+        border: 1px solid #e3e7f1;
+      }
+
+      .feedback strong { display: block; margin-bottom: 8px; }
+      .feedback a { color: var(--accent-strong); font-weight: 700; }
+
+      .hint {
+        font-size: 0.9rem;
+        color: #64748b;
+        margin-top: 8px;
+      }
+
+      @media (max-width: 760px) {
+        .app { padding: 18px; }
+        .options { grid-template-columns: 1fr; }
+        .header { flex-direction: column; align-items: flex-start; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section id="splash" class="screen active">
+        <div id="splashCard" class="splash-card">
+          <h1 class="title">AIQUEST</h1>
+          <p class="subtitle">Aprende sobre inteligencia artificial jugando con noticias reales.</p>
+          <button id="startBtn" class="btn">Comenzar</button>
+        </div>
+      </section>
+
+      <section id="game" class="screen">
+        <div class="game-shell">
+          <div class="header">
+            <div>
+              <p class="eyebrow">Mini juego</p>
+              <h2>¿Cuál es el titular real?</h2>
+            </div>
+            <button id="nextBtn" class="btn btn-secondary">Otra ronda</button>
+          </div>
+
+          <p id="statusText" class="status">Estamos buscando una noticia reciente sobre IA para que practiques.</p>
+          <div id="options" class="options"></div>
+          <div id="feedback" class="feedback" hidden></div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const splashScreen = document.getElementById('splash');
+      const gameScreen = document.getElementById('game');
+      const splashCard = document.getElementById('splashCard');
+      const startBtn = document.getElementById('startBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      const statusText = document.getElementById('statusText');
+      const optionsContainer = document.getElementById('options');
+      const feedbackBox = document.getElementById('feedback');
+
+      let currentCorrectTitle = '';
+      let currentLink = '';
+
+      const fallbackHeadlines = [
+        {
+          title: 'OpenAI presenta nuevas herramientas para acelerar tareas con inteligencia artificial',
+          link: 'https://example.com/ai-tools'
+        },
+        {
+          title: 'Las grandes empresas invierten más en modelos generativos para automatizar procesos',
+          link: 'https://example.com/ai-investment'
+        },
+        {
+          title: 'La IA ya ayuda a traducir idiomas con una precisión sorprendente',
+          link: 'https://example.com/ai-translation'
+        }
+      ];
+
+      const antonymMap = {
+        nuevo: ['viejo', 'antiguo'],
+        nueva: ['vieja', 'antigua'],
+        mejora: ['empeora', 'degrada'],
+        mejor: ['peor', 'inferior'],
+        rápida: ['lenta', 'tardía'],
+        rápido: ['lento', 'tardío'],
+        grande: ['pequeño', 'reducido'],
+        gran: ['pequeño', 'reducido'],
+        aumenta: ['disminuye', 'decrece'],
+        importante: ['irrelevante', 'secundario'],
+        avanza: ['retrocede', 'se detiene'],
+        potente: ['débil', 'limitado'],
+        poderoso: ['débil', 'limitado'],
+        ayuda: ['dificulta', 'complica'],
+        mejora: ['empeora', 'degrada'],
+        crece: ['decrece', 'disminuye']
+      };
+
+      function showScreen(screenId) {
+        splashScreen.classList.remove('active');
+        gameScreen.classList.remove('active');
+        document.getElementById(screenId).classList.add('active');
+      }
+
+      function startExperience() {
+        showScreen('game');
+        loadRound();
+      }
+
+      function getRandomHeadline() {
+        const pick = fallbackHeadlines[Math.floor(Math.random() * fallbackHeadlines.length)];
+        return { ...pick };
+      }
+
+      async function fetchHeadline() {
+        const rssUrl = 'https://news.google.com/rss/search?q=IA%20inteligencia%20artificial&hl=es&gl=ES&ceid=ES:es';
+        const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
+
+        try {
+          const response = await fetch(proxyUrl);
+          if (!response.ok) throw new Error('No se pudo obtener la noticia');
+          const data = await response.json();
+          const item = (data.items || []).find(item => item.title && item.link) || null;
+          if (item) {
+            return {
+              title: item.title.replace(/<[^>]*>/g, '').trim(),
+              link: item.link
+            };
+          }
+        } catch (error) {
+          console.warn('Usando titulares de respaldo:', error);
+        }
+
+        return getRandomHeadline();
+      }
+
+      function createAlteredTitle(title) {
+        const words = title.toLowerCase().split(/(\s+)/);
+        const candidates = [];
+
+        words.forEach((word, index) => {
+          const normalized = word.replace(/[¿?¡!.,;:()]/g, '').toLowerCase();
+          if (antonymMap[normalized]) {
+            const replacement = antonymMap[normalized][Math.floor(Math.random() * antonymMap[normalized].length)];
+            const originalWord = word.replace(/[¿?¡!.,;:()]/g, '');
+            const newWord = originalWord === originalWord.toUpperCase()
+              ? replacement.toUpperCase()
+              : replacement;
+            candidates.push({ index, word: originalWord, replacement: newWord });
+          }
+        });
+
+        if (candidates.length === 0) {
+          return `${title} (versión alterada)`;
+        }
+
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        const parts = title.split(/(\s+)/);
+        parts[chosen.index] = chosen.replacement;
+        return parts.join('');
+      }
+
+      function buildOptions(correctTitle) {
+        const alteredOne = createAlteredTitle(correctTitle);
+        const alteredTwo = createAlteredTitle(correctTitle);
+        const options = [correctTitle, alteredOne, alteredTwo].filter(Boolean);
+        return options.sort(() => Math.random() - 0.5);
+      }
+
+      function renderOptions(options, correctTitle, link) {
+        optionsContainer.innerHTML = '';
+        options.forEach(option => {
+          const btn = document.createElement('button');
+          btn.className = 'option';
+          btn.textContent = option;
+          btn.addEventListener('click', () => handleAnswer(option, correctTitle, link));
+          optionsContainer.appendChild(btn);
+        });
+
+        currentCorrectTitle = correctTitle;
+        currentLink = link;
+      }
+
+      function handleAnswer(selected, correctTitle, link) {
+        const buttons = Array.from(optionsContainer.querySelectorAll('.option'));
+        buttons.forEach(button => {
+          const isCorrect = button.textContent === correctTitle;
+          button.classList.toggle('correct', isCorrect);
+          button.classList.toggle('wrong', button.textContent === selected && !isCorrect);
+          button.disabled = true;
+        });
+
+        if (selected === correctTitle) {
+          feedbackBox.innerHTML = `<strong>¡Muy bien! Has encontrado el titular correcto.</strong><p>${correctTitle}</p><p class="hint">Abre la noticia original aquí: <a href="${link}" target="_blank" rel="noreferrer">${link}</a></p>`;
+          feedbackBox.style.borderColor = 'rgba(31, 157, 104, 0.3)';
+        } else {
+          feedbackBox.innerHTML = `<strong>Prueba otra vez.</strong><p>La noticia real era:</p><p><strong>${correctTitle}</strong></p><p class="hint">Abre la noticia original aquí: <a href="${link}" target="_blank" rel="noreferrer">${link}</a></p>`;
+          feedbackBox.style.borderColor = 'rgba(217, 83, 79, 0.3)';
+        }
+
+        feedbackBox.hidden = false;
+      }
+
+      async function loadRound() {
+        statusText.textContent = 'Estamos buscando una noticia reciente sobre IA para que practiques.';
+        feedbackBox.hidden = true;
+        feedbackBox.innerHTML = '';
+        optionsContainer.innerHTML = '<p class="hint">Cargando noticia...</p>';
+
+        const article = await fetchHeadline();
+        const options = buildOptions(article.title);
+        renderOptions(options, article.title, article.link);
+        statusText.textContent = 'Elige la opción que corresponde al titular real de una noticia reciente sobre IA.';
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => splashCard.classList.add('visible'), 1800);
+        startBtn.addEventListener('click', startExperience);
+        nextBtn.addEventListener('click', loadRound);
+      });
+    </script>
+  </body>
+</html>
